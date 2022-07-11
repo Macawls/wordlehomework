@@ -1,0 +1,52 @@
+name: Build and Deploy WebGL
+
+on: 
+  workflow_dispatch:
+  push:
+    branches:
+      - based
+
+jobs:    
+  build-project:
+    name: Build project ✨
+    runs-on: ubuntu-latest
+
+    env:
+      PROJECT_NAME: wordle-homework
+
+    strategy:
+      fail-fast: false
+      matrix:
+        targetPlatform:         
+          - WebGL
+
+    steps:
+      # Checkout
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          lfs: true
+
+      # Cache
+      - uses: actions/cache@v2
+        with:
+          path: Library
+          key: Library-${{ matrix.targetPlatform }}
+
+      # Build
+      - name: Build project
+        uses: game-ci/unity-builder@v2
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          targetPlatform:  ${{ matrix.targetPlatform }}
+          buildName: ${{ env.PROJECT_NAME }}
+
+      
+        #Upload to Pages (For WebGL builds)
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@4.1.1
+        if: matrix.targetPlatform == 'WebGL'
+        with:
+          branch: gh-pages # The branch the action should deploy to.
+          folder: build/WebGL/${{ env.PROJECT_NAME }} # The folder the action should deploy.
