@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -17,11 +18,28 @@ namespace _Scripts.Managers
         public char notInWord = '_';
 
         #region Unity Events
+
+        public Action onRestart;
+
         private void Awake()
         {
-            WordList = ReturnWordList("WordList", CharLimit);
+            FetchWords();
         }
+
+        private void Start()
+        {
+            GameManager.Instance.SoundManager.PlayMusic();
+        }
+
+        private void OnEnable()
+        {
+            onRestart += FetchWords;
+        }
+
+        private void FetchWords() => WordList = ReturnWordList("WordList", CharLimit);
         
+        
+
         #endregion
 
         #region Custom Methods

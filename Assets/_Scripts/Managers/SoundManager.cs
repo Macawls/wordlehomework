@@ -22,6 +22,11 @@ namespace _Scripts.Managers
         
         public void PlayFX(string clipName) => OnPlayFX?.Invoke(clipName);
 
+        public void PlayMusic()
+        {
+            _musicSource.Play();
+        }
+
         // I prefer to use 0 and 1 rather than -1 and 1
         public void AdjustPan(float panVal, bool isFX)
         {

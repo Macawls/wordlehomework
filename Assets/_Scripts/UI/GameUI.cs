@@ -6,6 +6,7 @@ using _Scripts.Managers;
 using DG.Tweening;
 using TMPro;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using Random = UnityEngine.Random;
 
@@ -19,15 +20,27 @@ namespace _Scripts.UI
         [SerializeField] private TextMeshProUGUI logContent;
         [SerializeField] private TextMeshProUGUI roundsContent;
         [SerializeField] private TextMeshProUGUI placeHolder;
+        [SerializeField] private TextMeshProUGUI triesContent;
+        [SerializeField] private TextMeshProUGUI wonContent;
+        [SerializeField] private TextMeshProUGUI lostContent;
         
-
+        [Header("Game Params")]
+        [SerializeField] private int maxTries = 6;
+        [SerializeField] private int gameRounds = 10;
+        
         private List<TextMeshProUGUI> _letters;
         private List<Image> _letterBGs;
         private List<RectTransform> _letterBGTransforms;
 
+        private int _currentTries;
+        
+        private int _roundsWon;
+        private int _roundsLost;
+
+        private string _latestGuess;
+
         private Action<string, bool> _onGuess;
         private string _currentWordToGuess;
-        private string _latestGuess;
 
         // create a color with hex value of 98c379
         [Header("Colors")]
@@ -38,22 +51,23 @@ namespace _Scripts.UI
         [SerializeField] private Color defaultLogColor;
         [SerializeField] private Color guessColor;
         
-        private static readonly int MFontColor = Shader.PropertyToID("m_fontColor");
 
         private Queue<string> _wordQueue;
-        [SerializeField] private int gameRounds = 10;
+        
 
-        private Action<string> onCorrectGuess;
+        private Action<string> _onCorrectGuess;
+        private Action<bool> _onAttempt;
+        
         private bool _animComplete;
 
         private void OnEnable()
         {
-            onCorrectGuess += HandleCorrectGuess;
+            _onCorrectGuess += NextRound;
         }
         
         private void OnDisable()
         {
-            onCorrectGuess += HandleCorrectGuess;
+            _onCorrectGuess -= NextRound;
         }
         
         private void Awake()
@@ -74,13 +88,23 @@ namespace _Scripts.UI
             }
             
             guessField.onSubmit.AddListener(OnGuessSubmit);
+            //guessField.onEndEdit.AddListener(PlayTypeSound);
+            guessField.onValueChanged.AddListener(PlayTypeSound);
+            
+            roundsContent.text = _wordQueue.Count.ToString();
+            triesContent.text = maxTries.ToString();
+            _currentTries = maxTries;
         }
-        
+
+        private void PlayTypeSound(string arg0)
+        {
+            GameManager.Instance.SoundManager.PlayFX("click");
+        }
+
         private void Start()
         {
             FillWordQueue(gameRounds);
             SetNewWord(_wordQueue.Peek());
-            roundsContent.text = _wordQueue.Count.ToString();
         }
         
         private void FillWordQueue(int amount)
@@ -97,8 +121,45 @@ namespace _Scripts.UI
             }
         }
 
+        private void UpdateRoundsContent(bool wonRound)
+        {
+            if (wonRound)
+            {
+                _roundsWon++;
+                wonContent.text = _roundsWon.ToString();
+            }
+            else
+            {
+                _roundsLost++;
+                lostContent.text = _roundsLost.ToString();
+            }
+        }
+
+        private void DecreaseTries()
+        {
+            _currentTries--;
+            triesContent.text = _currentTries.ToString();
+        }
+
+        private void ResetTries()
+        {
+            _currentTries = 6;
+            triesContent.text = _currentTries.ToString();
+        }
+
         private void OnGuessSubmit(string inputLine)
         {
+            if (inputLine.Length.Equals(_currentWordToGuess.Length))
+            {
+                DecreaseTries();
+            }
+            
+            if (_currentTries <= 0)
+            {
+                _onCorrectGuess?.Invoke(inputLine);
+                return;
+            }
+            
             _latestGuess = inputLine;
             
             if (!inputLine.Length.Equals(_currentWordToGuess.Length))
@@ -127,6 +188,7 @@ namespace _Scripts.UI
                 rect.transform.DOShakeScale(fullDuration, 3f);
                 GameManager.Instance.SoundManager.PlayFX("negative");
                 
+                _onAttempt?.Invoke(false);
                 return;
             }
             
@@ -154,7 +216,8 @@ namespace _Scripts.UI
 
             if (correctGuesses.Equals(_currentWordToGuess.Length))
             {
-                onCorrectGuess?.Invoke(inputLine);
+                _onCorrectGuess?.Invoke(inputLine);
+                _onAttempt?.Invoke(true);
             }
             else
             {
@@ -180,16 +243,23 @@ namespace _Scripts.UI
             }
         }
         
-        private void HandleCorrectGuess(string guess)
+        private void NextRound(string guess)
         {
             if (_wordQueue.Peek().Equals(guess))
             {
-                RemoveLastWord();
+                string correct = $"Congrats! the word was {_wordQueue.Peek().ToUpper()}";
+                UpdateLog(correct, correctColor);
+                UpdateRoundsContent(true);
+
             }
-
-            string correct = $"Congrats! the word was {guess.ToUpper()}";
-            UpdateLog(correct, correctColor);
-
+            else
+            {
+                string wrong = $"Damn! the word was {_wordQueue.Peek().ToUpper()}";
+                UpdateLog(wrong, wrongColor);
+                UpdateRoundsContent(false);
+            }
+            ResetTries();
+            RemoveLastWord();
             StartCoroutine(WaitToPLayAgain(2f));
         }
 
@@ -197,6 +267,12 @@ namespace _Scripts.UI
         {
             guessField.text = string.Empty;
             yield return new WaitForSeconds(duration);
+            if (_wordQueue.Count <= 0)
+            {
+                GameManager.Instance.WordManager.onRestart.Invoke();
+                ReloadScene();
+                yield break;
+            }
             SetNewWord(_wordQueue.Peek());
         }
         
@@ -314,10 +390,9 @@ namespace _Scripts.UI
             _wordQueue.Dequeue();
         }
 
-        private void RestartGame()
+        private static void ReloadScene()
         {
-            _wordQueue.Clear();
-            FillWordQueue(gameRounds);
+            SceneManager.LoadScene(SceneManager.GetActiveScene().name);
         }
 
         private void EmptyLetters()
